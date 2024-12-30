@@ -1,11 +1,19 @@
 import { clearVerifications } from './checkpointVerification';
 
 export const isKeyExpired = (expiresAt: string): boolean => {
-  const expirationDate = new Date(expiresAt);
-  return expirationDate.getTime() <= Date.now();
+  try {
+    const expirationDate = new Date(expiresAt);
+    return expirationDate.getTime() <= Date.now();
+  } catch {
+    return true; // If we can't parse the date, consider it expired
+  }
 };
 
 export const handleKeyExpiration = () => {
-  clearVerifications();
-  localStorage.removeItem('hwid'); // Reset HWID to allow new key generation
+  try {
+    clearVerifications();
+    localStorage.removeItem('hwid');
+  } catch (error) {
+    console.error('Error handling key expiration:', error);
+  }
 };
