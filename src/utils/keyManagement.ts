@@ -2,32 +2,42 @@ import { supabase } from '../config/supabase';
 import { getHWID } from './hwid';
 import type { Key } from '../types';
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const getExistingValidKey = async (): Promise<Key | null> => {
-  try {
-    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-      console.warn('Supabase configuration missing');
-      return null;
+  const hwid = getHWID();
+  const now = new Date();
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const { data: existingKeys, error } = await supabase
+        .from('keys')
+        .select('*')
+        .eq('hwid', hwid)
+        .eq('is_valid', true)
+        .gte('expires_at', now.toISOString())
+        .limit(1);
+
+      if (error) {
+        console.error(`Attempt ${attempt + 1} failed:`, error);
+        if (attempt < MAX_RETRIES - 1) {
+          await delay(RETRY_DELAY);
+          continue;
+        }
+        throw error;
+      }
+
+      return existingKeys && existingKeys.length > 0 ? existingKeys[0] : null;
+    } catch (error) {
+      if (attempt === MAX_RETRIES - 1) {
+        throw error;
+      }
+      await delay(RETRY_DELAY);
     }
-
-    const hwid = getHWID();
-    const now = new Date();
-
-    const { data: existingKeys, error } = await supabase
-      .from('keys')
-      .select('*')
-      .eq('hwid', hwid)
-      .eq('is_valid', true)
-      .gte('expires_at', now.toISOString())
-      .limit(1);
-
-    if (error) {
-      console.error('Error fetching key:', error);
-      return null;
-    }
-
-    return existingKeys && existingKeys.length > 0 ? existingKeys[0] : null;
-  } catch (error) {
-    console.error('Failed to check existing key:', error);
-    return null;
   }
+
+  return null;
 };

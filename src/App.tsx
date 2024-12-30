@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { KeyDisplay } from './components/KeyDisplay';
 import { CheckpointButtons } from './components/CheckpointButtons';
 import { generateKey, KeyGenerationError } from './utils/keyGeneration';
@@ -21,6 +21,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  
+  // Use ref to prevent multiple initializations
+  const initialized = useRef(false);
 
   const allCheckpointsCompleted = Object.values(checkpoints).every(Boolean);
 
@@ -29,11 +32,14 @@ export default function App() {
       ? error.message 
       : 'An unexpected error occurred';
     setError(message);
-    setTimeout(() => setError(null), 5000); // Clear error after 5 seconds
+    setTimeout(() => setError(null), 5000);
   }, []);
 
-  // Handle Linkvertise redirect
+  // Handle Linkvertise redirect - Only run once
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const checkpointParam = params.get(REDIRECT_PARAM);
     const checkpointNumber = validateCheckpoint(checkpointParam);
@@ -43,9 +49,6 @@ export default function App() {
         ...prev,
         [`checkpoint${checkpointNumber}`]: true,
       }));
-
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
 
@@ -64,12 +67,11 @@ export default function App() {
             setGeneratedKey(existingKey);
             
             // Load checkpoint verifications for valid key
-            const newCheckpoints = {
+            setCheckpoints({
               checkpoint1: isCheckpointVerified(1),
               checkpoint2: isCheckpointVerified(2),
               checkpoint3: isCheckpointVerified(3),
-            };
-            setCheckpoints(newCheckpoints);
+            });
           }
         }
       } catch (error) {
@@ -84,21 +86,33 @@ export default function App() {
 
   // Handle key generation
   useEffect(() => {
+    let mounted = true;
+
     const generateKeyIfNeeded = async () => {
       if (allCheckpointsCompleted && !generatedKey && !generating) {
         setGenerating(true);
         try {
           const newKey = await generateKey();
-          setGeneratedKey(newKey);
+          if (mounted) {
+            setGeneratedKey(newKey);
+          }
         } catch (error) {
-          handleError(error);
+          if (mounted) {
+            handleError(error);
+          }
         } finally {
-          setGenerating(false);
+          if (mounted) {
+            setGenerating(false);
+          }
         }
       }
     };
 
     generateKeyIfNeeded();
+
+    return () => {
+      mounted = false;
+    };
   }, [allCheckpointsCompleted, generatedKey, generating, handleError]);
 
   if (loading) {
