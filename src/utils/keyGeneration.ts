@@ -1,20 +1,24 @@
 import { v4 as uuidv4 } from 'uuid';
 import { addHours } from 'date-fns';
-import { supabase } from '../config/supabase';
+import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { getHWID } from './hwid';
 
 export const generateKey = async () => {
   try {
-    console.log('Starting key generation process...');
+    if (!isSupabaseConfigured()) {
+      throw new Error('Database configuration is missing');
+    }
+
+    if (!supabase) {
+      throw new Error('Database client is not initialized');
+    }
 
     const key = uuidv4();
     const now = new Date();
     const expiresAt = addHours(now, 24);
     const hwid = getHWID();
 
-    console.log('Checking for existing keys...');
-
-    // Check if there's an existing valid key for this HWID
+    // Check for existing valid key
     const { data: existingKeys, error: fetchError } = await supabase
       .from('keys')
       .select('*')
@@ -23,16 +27,12 @@ export const generateKey = async () => {
       .gte('expires_at', now.toISOString());
 
     if (fetchError) {
-      console.error('Error fetching existing keys:', fetchError);
       throw fetchError;
     }
 
     if (existingKeys && existingKeys.length > 0) {
-      console.log('Found existing valid key');
       return existingKeys[0];
     }
-
-    console.log('Creating new key...');
 
     // Create new key
     const { data, error } = await supabase
@@ -50,7 +50,6 @@ export const generateKey = async () => {
       .single();
 
     if (error) {
-      console.error('Error creating key:', error);
       throw error;
     }
 
@@ -58,7 +57,6 @@ export const generateKey = async () => {
       throw new Error('No data returned from key creation');
     }
 
-    console.log('Key generated successfully');
     return data;
   } catch (error) {
     console.error('Key generation failed:', error);

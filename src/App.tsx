@@ -45,6 +45,12 @@ export default function App() {
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        if (!isSupabaseConfigured()) {
+          setError('Database configuration is missing. Please check your environment variables.');
+          setLoading(false);
+          return;
+        }
+
         const existingKey = await getExistingValidKey();
         
         if (existingKey) {
@@ -66,7 +72,7 @@ export default function App() {
         }
       } catch (error) {
         console.error('Error initializing app:', error);
-        setError('Failed to load key system. Please try again.');
+        setError('Failed to load key system. Please check your connection and try again.');
       } finally {
         setLoading(false);
       }
