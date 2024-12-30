@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { KeyDisplay } from './components/KeyDisplay';
 import { CheckpointButtons } from './components/CheckpointButtons';
 import { generateKey } from './utils/keyGeneration';
@@ -22,7 +21,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [captchaVerified, setCaptchaVerified] = useState(true); // Set to true by default for now
 
   const allCheckpointsCompleted = Object.values(checkpoints).every(Boolean);
 
@@ -57,7 +56,6 @@ export default function App() {
             handleKeyExpiration();
             setGeneratedKey(null);
             setCheckpoints(resetCheckpoints());
-            setCaptchaVerified(false);
           } else {
             setGeneratedKey(existingKey);
           }
@@ -103,10 +101,6 @@ export default function App() {
     generateKeyIfNeeded();
   }, [allCheckpointsCompleted, generatedKey, generating]);
 
-  const onCaptchaVerify = () => {
-    setCaptchaVerified(true);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
@@ -144,19 +138,7 @@ export default function App() {
 
           {!generatedKey && !generating && (
             <>
-              {!captchaVerified ? (
-                <div className="space-y-6">
-                  <div className="flex justify-center mb-6">
-                    <HCaptcha
-                      sitekey={import.meta.env.VITE_HCAPTCHA_SITE_KEY}
-                      onVerify={onCaptchaVerify}
-                      theme="dark"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <CheckpointButtons checkpoints={checkpoints} />
-              )}
+              {captchaVerified && <CheckpointButtons checkpoints={checkpoints} />}
             </>
           )}
 
