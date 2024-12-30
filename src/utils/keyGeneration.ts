@@ -1,40 +1,42 @@
 import { v4 as uuidv4 } from 'uuid';
 import { addHours } from 'date-fns';
-import { supabase, isSupabaseConfigured } from '../config/supabase';
+import { supabase } from '../config/supabase';
 import { getHWID } from './hwid';
+import type { Key } from '../types';
 
-export const generateKey = async () => {
+export class KeyGenerationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'KeyGenerationError';
+  }
+}
+
+export const generateKey = async (): Promise<Key> => {
   try {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database configuration is missing');
-    }
-
-    if (!supabase) {
-      throw new Error('Database client is not initialized');
-    }
-
-    const key = uuidv4();
-    const now = new Date();
-    const expiresAt = addHours(now, 24);
     const hwid = getHWID();
-
-    // Check for existing valid key
+    const now = new Date();
+    
+    // First check for existing valid key
     const { data: existingKeys, error: fetchError } = await supabase
       .from('keys')
       .select('*')
       .eq('hwid', hwid)
       .eq('is_valid', true)
-      .gte('expires_at', now.toISOString());
+      .gte('expires_at', now.toISOString())
+      .limit(1);
 
     if (fetchError) {
-      throw fetchError;
+      throw new KeyGenerationError('Failed to check existing keys');
     }
 
     if (existingKeys && existingKeys.length > 0) {
       return existingKeys[0];
     }
 
-    // Create new key
+    // Generate new key if no valid key exists
+    const key = uuidv4();
+    const expiresAt = addHours(now, 24);
+
     const { data, error } = await supabase
       .from('keys')
       .insert([
@@ -49,17 +51,15 @@ export const generateKey = async () => {
       .select()
       .single();
 
-    if (error) {
-      throw error;
-    }
-
-    if (!data) {
-      throw new Error('No data returned from key creation');
+    if (error || !data) {
+      throw new KeyGenerationError('Failed to generate new key');
     }
 
     return data;
   } catch (error) {
-    console.error('Key generation failed:', error);
-    throw error;
+    if (error instanceof KeyGenerationError) {
+      throw error;
+    }
+    throw new KeyGenerationError('Unexpected error during key generation');
   }
 };

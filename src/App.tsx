@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { KeyDisplay } from './components/KeyDisplay';
 import { CheckpointButtons } from './components/CheckpointButtons';
-import { generateKey } from './utils/keyGeneration';
+import { generateKey, KeyGenerationError } from './utils/keyGeneration';
 import { getExistingValidKey } from './utils/keyManagement';
 import { REDIRECT_PARAM, validateCheckpoint } from './utils/linkvertiseHandler';
 import { isCheckpointVerified } from './utils/checkpointVerification';
 import { isKeyExpired, handleKeyExpiration } from './utils/keyExpiration';
 import { getCheckpointProgress } from './utils/checkpointProgress';
 import { resetCheckpoints } from './utils/checkpointManager';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import type { CheckpointStatus, Key } from './types';
 
 export default function App() {
@@ -21,38 +21,40 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [captchaVerified, setCaptchaVerified] = useState(true);
 
-  // Handle Linkvertise redirect and verify checkpoints
+  const allCheckpointsCompleted = Object.values(checkpoints).every(Boolean);
+
+  const handleError = useCallback((error: unknown) => {
+    const message = error instanceof KeyGenerationError 
+      ? error.message 
+      : 'An unexpected error occurred';
+    setError(message);
+    setTimeout(() => setError(null), 5000); // Clear error after 5 seconds
+  }, []);
+
+  // Handle Linkvertise redirect
   useEffect(() => {
-    const handleCheckpointVerification = () => {
-      const params = new URLSearchParams(window.location.search);
-      const checkpointParam = params.get(REDIRECT_PARAM);
-      const checkpointNumber = validateCheckpoint(checkpointParam);
+    const params = new URLSearchParams(window.location.search);
+    const checkpointParam = params.get(REDIRECT_PARAM);
+    const checkpointNumber = validateCheckpoint(checkpointParam);
 
-      if (checkpointNumber) {
-        setCheckpoints(prev => ({
-          ...prev,
-          [`checkpoint${checkpointNumber}`]: true
-        }));
-      }
-    };
+    if (checkpointNumber) {
+      setCheckpoints(prev => ({
+        ...prev,
+        [`checkpoint${checkpointNumber}`]: true,
+      }));
 
-    handleCheckpointVerification();
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, []);
 
   // Initialize app state
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        if (!isSupabaseConfigured()) {
-          setError('Database configuration is missing. Please check your environment variables.');
-          setLoading(false);
-          return;
-        }
-
         const existingKey = await getExistingValidKey();
-        
+
         if (existingKey) {
           if (isKeyExpired(existingKey.expires_at)) {
             handleKeyExpiration();
@@ -60,39 +62,36 @@ export default function App() {
             setCheckpoints(resetCheckpoints());
           } else {
             setGeneratedKey(existingKey);
+            
+            // Load checkpoint verifications for valid key
+            const newCheckpoints = {
+              checkpoint1: isCheckpointVerified(1),
+              checkpoint2: isCheckpointVerified(2),
+              checkpoint3: isCheckpointVerified(3),
+            };
+            setCheckpoints(newCheckpoints);
           }
         }
-
-        if (existingKey && !isKeyExpired(existingKey.expires_at)) {
-          setCheckpoints({
-            checkpoint1: isCheckpointVerified(1),
-            checkpoint2: isCheckpointVerified(2),
-            checkpoint3: isCheckpointVerified(3),
-          });
-        }
       } catch (error) {
-        console.error('Error initializing app:', error);
-        setError('Failed to load key system. Please check your connection and try again.');
+        handleError(error);
       } finally {
         setLoading(false);
       }
     };
 
     initializeApp();
-  }, []);
+  }, [handleError]);
 
   // Handle key generation
   useEffect(() => {
     const generateKeyIfNeeded = async () => {
-      const allCompleted = Object.values(checkpoints).every(Boolean);
-      if (allCompleted && !generatedKey && !generating) {
+      if (allCheckpointsCompleted && !generatedKey && !generating) {
         setGenerating(true);
         try {
           const newKey = await generateKey();
           setGeneratedKey(newKey);
         } catch (error) {
-          console.error('Error generating key:', error);
-          setError('Failed to generate key. Please try again.');
+          handleError(error);
         } finally {
           setGenerating(false);
         }
@@ -100,7 +99,7 @@ export default function App() {
     };
 
     generateKeyIfNeeded();
-  }, [checkpoints, generatedKey, generating]);
+  }, [allCheckpointsCompleted, generatedKey, generating, handleError]);
 
   if (loading) {
     return (
@@ -118,15 +117,16 @@ export default function App() {
       <div className="max-w-md w-full">
         <div className="bg-[#242424] rounded-lg shadow-xl p-8">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-red-500 mb-2">Key system</h1>
+            <h1 className="text-3xl font-bold text-red-500 mb-2">Key System</h1>
             <p className="text-gray-400">
-              Checkpoint: {getCheckpointProgress(checkpoints)} / 3
+              Checkpoint Progress: {getCheckpointProgress(checkpoints)} / 3
             </p>
           </div>
 
           {error && (
-            <div className="bg-red-900/50 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg mb-4">
-              {error}
+            <div className="bg-red-900/50 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p>{error}</p>
             </div>
           )}
 
@@ -137,7 +137,7 @@ export default function App() {
             </div>
           )}
 
-          {!generatedKey && !generating && captchaVerified && (
+          {!generatedKey && !generating && (
             <CheckpointButtons checkpoints={checkpoints} />
           )}
 

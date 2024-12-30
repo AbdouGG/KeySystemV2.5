@@ -1,16 +1,31 @@
 import { CHECKPOINT_LINKS } from './linkConfig';
 
-const VERIFICATION_STORAGE_KEY = 'checkpoint_verifications';
-
 export interface CheckpointVerificationResult {
   success: boolean;
   timestamp: number;
 }
 
+const VERIFICATION_STORAGE_KEY = 'checkpoint_verifications';
+const VERIFICATION_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+
 export const getVerifications = (): Record<string, CheckpointVerificationResult> => {
   try {
     const stored = localStorage.getItem(VERIFICATION_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
+    if (!stored) return {};
+    
+    const verifications = JSON.parse(stored);
+    const now = Date.now();
+    
+    // Clean expired verifications
+    const cleaned = Object.entries(verifications).reduce((acc, [key, value]) => {
+      if (now - (value as CheckpointVerificationResult).timestamp <= VERIFICATION_EXPIRY) {
+        acc[key] = value as CheckpointVerificationResult;
+      }
+      return acc;
+    }, {} as Record<string, CheckpointVerificationResult>);
+    
+    localStorage.setItem(VERIFICATION_STORAGE_KEY, JSON.stringify(cleaned));
+    return cleaned;
   } catch {
     return {};
   }
@@ -24,7 +39,7 @@ export const clearVerifications = () => {
   }
 };
 
-export const saveVerification = (checkpoint: number) => {
+export const saveVerification = (checkpoint: number): void => {
   try {
     const verifications = getVerifications();
     verifications[`checkpoint${checkpoint}`] = {
@@ -41,13 +56,9 @@ export const isCheckpointVerified = (checkpoint: number): boolean => {
   try {
     const verifications = getVerifications();
     const verification = verifications[`checkpoint${checkpoint}`];
-
     if (!verification) return false;
-
-    const expirationTime = 24 * 60 * 60 * 1000; // 24 hours
-    const hasExpired = Date.now() - verification.timestamp > expirationTime;
-
-    return verification.success && !hasExpired;
+    return verification.success && 
+           (Date.now() - verification.timestamp <= VERIFICATION_EXPIRY);
   } catch {
     return false;
   }

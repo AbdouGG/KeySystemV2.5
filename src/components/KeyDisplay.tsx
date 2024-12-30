@@ -1,5 +1,5 @@
-import React from 'react';
-import { Key, Copy } from 'lucide-react';
+import React, { useState } from 'react';
+import { Key, Copy, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface KeyDisplayProps {
@@ -10,8 +10,16 @@ interface KeyDisplayProps {
 }
 
 export const KeyDisplay: React.FC<KeyDisplayProps> = ({ keyData }) => {
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(keyData.key);
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(keyData.key);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+    }
   };
 
   return (
@@ -21,13 +29,18 @@ export const KeyDisplay: React.FC<KeyDisplayProps> = ({ keyData }) => {
         <h2 className="text-xl font-bold text-red-500">Your Key is Ready!</h2>
       </div>
 
-      <div className="bg-[#1a1a1a] p-4 rounded-md flex items-center justify-between mb-4">
-        <code className="font-mono text-sm text-gray-300">{keyData.key}</code>
+      <div className="bg-[#1a1a1a] p-4 rounded-md flex items-center justify-between mb-4 group">
+        <code className="font-mono text-sm text-gray-300 break-all">{keyData.key}</code>
         <button
           onClick={copyToClipboard}
-          className="p-2 hover:bg-[#242424] rounded-full transition-colors"
+          className="p-2 hover:bg-[#242424] rounded-full transition-colors ml-2 flex-shrink-0"
+          title="Copy to clipboard"
         >
-          <Copy className="w-5 h-5 text-gray-400" />
+          {copied ? (
+            <Check className="w-5 h-5 text-green-500" />
+          ) : (
+            <Copy className="w-5 h-5 text-gray-400 group-hover:text-gray-300" />
+          )}
         </button>
       </div>
 
