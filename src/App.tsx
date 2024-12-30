@@ -21,28 +21,24 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [captchaVerified, setCaptchaVerified] = useState(true); // Set to true by default for now
-
-  const allCheckpointsCompleted = Object.values(checkpoints).every(Boolean);
+  const [captchaVerified, setCaptchaVerified] = useState(true);
 
   // Handle Linkvertise redirect and verify checkpoints
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const checkpointParam = params.get(REDIRECT_PARAM);
-    const checkpointNumber = validateCheckpoint(checkpointParam);
+    const handleCheckpointVerification = () => {
+      const params = new URLSearchParams(window.location.search);
+      const checkpointParam = params.get(REDIRECT_PARAM);
+      const checkpointNumber = validateCheckpoint(checkpointParam);
 
-    if (checkpointNumber) {
-      const checkpointKey =
-        `checkpoint${checkpointNumber}` as keyof CheckpointStatus;
-      setCheckpoints((prev) => ({
-        ...prev,
-        [checkpointKey]: true,
-      }));
+      if (checkpointNumber) {
+        setCheckpoints(prev => ({
+          ...prev,
+          [`checkpoint${checkpointNumber}`]: true
+        }));
+      }
+    };
 
-      // Clean up URL
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
-    }
+    handleCheckpointVerification();
   }, []);
 
   // Initialize app state
@@ -50,7 +46,7 @@ export default function App() {
     const initializeApp = async () => {
       try {
         const existingKey = await getExistingValidKey();
-
+        
         if (existingKey) {
           if (isKeyExpired(existingKey.expires_at)) {
             handleKeyExpiration();
@@ -61,14 +57,12 @@ export default function App() {
           }
         }
 
-        // Only load checkpoint verifications if we have a valid key
         if (existingKey && !isKeyExpired(existingKey.expires_at)) {
-          const newCheckpoints = {
+          setCheckpoints({
             checkpoint1: isCheckpointVerified(1),
             checkpoint2: isCheckpointVerified(2),
             checkpoint3: isCheckpointVerified(3),
-          };
-          setCheckpoints(newCheckpoints);
+          });
         }
       } catch (error) {
         console.error('Error initializing app:', error);
@@ -81,10 +75,11 @@ export default function App() {
     initializeApp();
   }, []);
 
-  // Handle key generation when all checkpoints are completed
+  // Handle key generation
   useEffect(() => {
     const generateKeyIfNeeded = async () => {
-      if (allCheckpointsCompleted && !generatedKey && !generating) {
+      const allCompleted = Object.values(checkpoints).every(Boolean);
+      if (allCompleted && !generatedKey && !generating) {
         setGenerating(true);
         try {
           const newKey = await generateKey();
@@ -99,7 +94,7 @@ export default function App() {
     };
 
     generateKeyIfNeeded();
-  }, [allCheckpointsCompleted, generatedKey, generating]);
+  }, [checkpoints, generatedKey, generating]);
 
   if (loading) {
     return (
@@ -136,10 +131,8 @@ export default function App() {
             </div>
           )}
 
-          {!generatedKey && !generating && (
-            <>
-              {captchaVerified && <CheckpointButtons checkpoints={checkpoints} />}
-            </>
+          {!generatedKey && !generating && captchaVerified && (
+            <CheckpointButtons checkpoints={checkpoints} />
           )}
 
           {generatedKey && <KeyDisplay keyData={generatedKey} />}
